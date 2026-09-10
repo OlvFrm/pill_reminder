@@ -46,19 +46,21 @@ class MedicationRepository extends ChangeNotifier {
       Medication(
         id: 'debug-1',
         name: 'Ibuprofen',
-        colorValue: 0xFFE57373, // red
+        colorValue: 0xFFE57373,
         reminders: [
           ReminderRule(
             id: 'r1',
             hour: 8,
             minute: 0,
             daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
+            dosage: '1 pill',
           ),
           ReminderRule(
             id: 'r2',
             hour: 20,
             minute: 0,
             daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
+            dosage: '1 pill',
           ),
         ],
         history: [
@@ -67,25 +69,28 @@ class MedicationRepository extends ChangeNotifier {
             timestamp: now.subtract(const Duration(hours: 14)),
             status: LogStatus.taken,
             source: LogSource.fromReminder,
+            dosage: '1 pill',
           ),
           HistoryEntry(
             medicationId: 'debug-1',
             timestamp: now.subtract(const Duration(days: 1, hours: 2)),
             status: LogStatus.missed,
             source: LogSource.fromReminder,
+            dosage: '1 pill',
           ),
         ],
       ),
       Medication(
         id: 'debug-2',
         name: 'Vitamin D',
-        colorValue: 0xFFFFB300, // amber
+        colorValue: 0xFFFFB300,
         reminders: [
           ReminderRule(
             id: 'r3',
             hour: 9,
             minute: 30,
             daysOfWeek: [1, 2, 3, 4, 5],
+            dosage: '2000 IU',
           ),
         ],
         history: const [],
@@ -93,7 +98,7 @@ class MedicationRepository extends ChangeNotifier {
       Medication(
         id: 'debug-3',
         name: 'Amoxicillin',
-        colorValue: 0xFF64B5F6, // blue
+        colorValue: 0xFF64B5F6,
         reminders: [],
         history: [
           HistoryEntry(
@@ -101,6 +106,7 @@ class MedicationRepository extends ChangeNotifier {
             timestamp: now.subtract(const Duration(hours: 3)),
             status: LogStatus.taken,
             source: LogSource.manualEntry,
+            dosage: '500mg',
           ),
         ],
       ),

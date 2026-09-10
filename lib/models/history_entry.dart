@@ -7,11 +7,13 @@ class HistoryEntry {
   final DateTime timestamp;
   final LogStatus status;
   final LogSource source;
+  final String dosage; // e.g. "1 pill", "500mg"
 
   const HistoryEntry({
     required this.medicationId,
     required this.timestamp,
     required this.status,
     required this.source,
+    required this.dosage,
   });
 }
