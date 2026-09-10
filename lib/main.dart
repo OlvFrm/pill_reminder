@@ -1,72 +1,36 @@
 import 'package:flutter/material.dart';
-import 'screens/main_navigation_screen.dart';
-import 'services/medication_repository.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:medication_tracker/core/notifications/notification_service.dart';
+import 'package:medication_tracker/features/doses/application/dose_providers.dart';
+import 'package:medication_tracker/features/doses/domain/dose.dart';
 
-void main() {
+import 'app.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final medicationRepository = MedicationRepository();
 
-  runApp(PillReminderApp(repository: medicationRepository));
-}
+  final notificationService = NotificationService();
+  await notificationService.init();
 
-class PillReminderApp extends StatelessWidget {
-  final MedicationRepository repository;
+  // Build the container by hand (rather than letting ProviderScope create
+  // it) so we can wire the OS notification callback to it before any
+  // widget builds. This is the one deliberate exception to "widgets never
+  // touch repositories directly" — it's not a widget, it's the composition
+  // root, and the OS callback has no BuildContext to work with anyway.
+  final container = ProviderContainer(
+    overrides: [
+      notificationServiceProvider.overrideWithValue(notificationService),
+    ],
+  );
 
-  const PillReminderApp({super.key, required this.repository});
+  notificationService.onDoseActioned = (String doseId, DoseStatus status) {
+    container.read(doseRepositoryProvider).updateStatus(doseId, status);
+  };
 
-  @override
-  Widget build(BuildContext context) {
-    const baseBrandColor = Color.fromARGB(255, 31, 52, 171);
-
-    // Light Color Scheme
-    final lightColorScheme = ColorScheme.fromSeed(
-      seedColor: baseBrandColor,
-      brightness: Brightness.light,
-    );
-
-    // Dark Color Scheme
-    final darkColorScheme = ColorScheme.fromSeed(
-      seedColor: baseBrandColor,
-      brightness: Brightness.dark,
-    );
-
-    return MaterialApp(
-      title: 'Pills Reminder',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: lightColorScheme,
-        appBarTheme: AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-          scrolledUnderElevation: 2,
-          backgroundColor: lightColorScheme.surfaceContainer,
-          foregroundColor: lightColorScheme.onSurface,
-          titleTextStyle: TextStyle(
-            color: lightColorScheme.onSurface,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: darkColorScheme,
-        appBarTheme: AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-          scrolledUnderElevation: 2,
-          backgroundColor: darkColorScheme.surfaceContainer,
-          foregroundColor: darkColorScheme.onSurface,
-          titleTextStyle: TextStyle(
-            color: darkColorScheme.onSurface,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      themeMode: ThemeMode.system,
-      home: MainNavigationScreen(repository: repository),
-    );
-  }
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MedicationTrackerApp(),
+    ),
+  );
 }
