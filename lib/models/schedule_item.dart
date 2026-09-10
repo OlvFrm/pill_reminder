@@ -8,7 +8,7 @@ class ScheduleItem {
   final Medication medication;
   final TimeOfDay time;
   final ScheduleType type;
-  final HistoryEntry? historyEntry; // Non-null if logged or skipped today
+  final HistoryEntry? historyEntry;
 
   const ScheduleItem({
     required this.medication,
@@ -17,7 +17,6 @@ class ScheduleItem {
     this.historyEntry,
   });
 
-  /// Compares items by hour and minute to sort from earliest to latest in the day
   int compareTo(ScheduleItem other) {
     final aMinutes = time.hour * 60 + time.minute;
     final bMinutes = other.time.hour * 60 + other.time.minute;

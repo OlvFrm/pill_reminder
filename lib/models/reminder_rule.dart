@@ -7,12 +7,12 @@ class ReminderRule {
   final int minute;
   final List<int> daysOfWeek; // 1 = Monday, 7 = Sunday
 
-  const ReminderRule({
+  ReminderRule({
     required this.id,
     required this.hour,
     required this.minute,
-    required this.daysOfWeek,
-  });
+    required List<int> daysOfWeek,
+  }) : daysOfWeek = List.unmodifiable(daysOfWeek);
 
   TimeOfDay get time => TimeOfDay(hour: hour, minute: minute);
 

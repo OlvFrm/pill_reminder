@@ -1,2 +1,2 @@
-enum LogStatus { taken, skipped }
-enum LogSource { manualEntry, notificationAction }
+enum LogStatus { taken, skipped, missed }
+enum LogSource { manualEntry, fromReminder }

@@ -10,13 +10,14 @@ class Medication {
   final List<ReminderRule> reminders;
   final List<HistoryEntry> history;
 
-  const Medication({
+  Medication({
     required this.id,
     required this.name,
     required this.colorValue,
-    required this.reminders,
-    required this.history,
-  });
+    required List<ReminderRule> reminders,
+    required List<HistoryEntry> history,
+  })  : reminders = List.unmodifiable(reminders),
+        history = List.unmodifiable(history);
 
   /// Efficient lookup without creating temporary sorted array copies
   HistoryEntry? get lastTakenEntry {
