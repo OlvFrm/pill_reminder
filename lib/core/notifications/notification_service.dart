@@ -69,34 +69,46 @@ class NotificationService {
     final scheduled = tz.TZDateTime.from(dose.scheduledFor, tz.local);
     if (scheduled.isBefore(tz.TZDateTime.now(tz.local))) return;
 
-    await _plugin.zonedSchedule(
-      id: dose.id.hashCode, // stable per-dose notification id
-      title: 'Time for $medicationName',
-      body: dosage,
-      scheduledDate: scheduled,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          'dose_reminders',
-          'Dose reminders',
-          actions: const [
-            AndroidNotificationAction(_takenActionId, 'Mark taken'),
-            AndroidNotificationAction(_skippedActionId, 'Mark skipped'),
-          ],
+    try {
+      await _plugin.zonedSchedule(
+        id: dose.id.hashCode, // stable per-dose notification id
+        title: 'Time for $medicationName',
+        body: dosage,
+        scheduledDate: scheduled,
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            'dose_reminders',
+            'Dose reminders',
+            actions: const [
+              AndroidNotificationAction(_takenActionId, 'Mark taken'),
+              AndroidNotificationAction(_skippedActionId, 'Mark skipped'),
+            ],
+          ),
+          iOS: const DarwinNotificationDetails(
+            categoryIdentifier: 'dose_reminder_category',
+          ),
         ),
-        iOS: const DarwinNotificationDetails(
-          categoryIdentifier: 'dose_reminder_category',
-        ),
-      ),
-      payload: dose.id,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      // Note: `uiLocalNotificationDateInterpretation` and
-      // `androidAllowWhileIdle` no longer exist as of v18+ — the plugin
-      // dropped pre-iOS-10 support, and androidScheduleMode fully replaced
-      // the old idle-mode flag.
-    );
+        payload: dose.id,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        // Note: `uiLocalNotificationDateInterpretation` and
+        // `androidAllowWhileIdle` no longer exist as of v18+ — the plugin
+        // dropped pre-iOS-10 support, and androidScheduleMode fully replaced
+        // the old idle-mode flag.
+      );
+    } on UnimplementedError {
+      // Some platform backends (Linux desktop, as of this plugin version)
+      // don't implement scheduled notifications at all — only immediate
+      // `show()`. That's a real gap for that platform, not something to
+      // paper over silently in production, but it shouldn't crash the app;
+      // dose data/status still works fine without the reminder firing.
+    }
   }
 
-  Future<void> cancelForDose(String doseId) {
-    return _plugin.cancel(id: doseId.hashCode);
+  Future<void> cancelForDose(String doseId) async {
+    try {
+      await _plugin.cancel(id: doseId.hashCode);
+    } on UnimplementedError {
+      // See note above.
+    }
   }
 }
