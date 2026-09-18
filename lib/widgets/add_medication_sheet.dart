@@ -16,11 +16,31 @@ class AddMedicationSheet extends StatefulWidget {
   State<AddMedicationSheet> createState() => _AddMedicationSheetState();
 }
 
+/// A reminder slot being edited: a time, its own dosage, and which days it fires.
+class _ReminderDraft {
+  TimeOfDay time;
+  final TextEditingController dosageController;
+  Set<int> selectedDays; // 1 = Monday, 7 = Sunday
+  String? dosageError;
+  String? daysError;
+
+  _ReminderDraft({
+    required this.time,
+    String dosage = '',
+    Set<int>? selectedDays,
+  })  : dosageController = TextEditingController(text: dosage),
+        selectedDays = selectedDays ?? {1, 2, 3, 4, 5, 6, 7};
+
+  int get sortKey => time.hour * 60 + time.minute;
+
+  void dispose() => dosageController.dispose();
+}
+
 class _AddMedicationSheetState extends State<AddMedicationSheet> {
   final _formKey = GlobalKey<FormState>();
   late String _name;
   late int _selectedColor;
-  late List<TimeOfDay> _reminderTimes;
+  late List<_ReminderDraft> _reminderDrafts;
 
   static const List<int> _colorOptions = [
     0xFF2196F3, // Blue
@@ -30,27 +50,51 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
     0xFF9C27B0, // Purple
   ];
 
-  static const List<int> _allDays = [1, 2, 3, 4, 5, 6, 7];
+  // static const List<int> _allDays = [1, 2, 3, 4, 5, 6, 7];
+  static const List<String> _dayAbbrev = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+  static const List<String> _dayFull = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+  static const Set<int> _weekdays = {1, 2, 3, 4, 5};
+  static const Set<int> _weekend = {6, 7};
 
   @override
   void initState() {
     super.initState();
     _name = widget.initialMedication?.name ?? '';
     _selectedColor = widget.initialMedication?.colorValue ?? _colorOptions.first;
-    _reminderTimes = widget.initialMedication?.reminders
-            .map((r) => r.time)
+    _reminderDrafts = widget.initialMedication?.reminders
+            .map((r) => _ReminderDraft(
+                  time: r.time,
+                  dosage: r.dosage,
+                  selectedDays: r.daysOfWeek.toSet(),
+                ))
             .toList() ??
-        [const TimeOfDay(hour: 8, minute: 0)];
+        [_ReminderDraft(time: const TimeOfDay(hour: 8, minute: 0))];
+    _sortDrafts();
+  }
+
+  @override
+  void dispose() {
+    for (final draft in _reminderDrafts) {
+      draft.dispose();
+    }
+    super.dispose();
+  }
+
+  void _sortDrafts() {
+    _reminderDrafts.sort((a, b) => a.sortKey.compareTo(b.sortKey));
   }
 
   Future<void> _pickTime(int index) async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _reminderTimes[index],
+      initialTime: _reminderDrafts[index].time,
     );
     if (picked != null) {
       setState(() {
-        _reminderTimes[index] = picked;
+        _reminderDrafts[index].time = picked;
+        _sortDrafts();
       });
     }
   }
@@ -62,42 +106,79 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
     );
     if (picked != null) {
       setState(() {
-        _reminderTimes.add(picked);
+        _reminderDrafts.add(_ReminderDraft(time: picked));
+        _sortDrafts();
       });
     }
   }
 
   void _removeTimeSlot(int index) {
     setState(() {
-      _reminderTimes.removeAt(index);
+      _reminderDrafts.removeAt(index).dispose();
     });
   }
 
+  void _toggleDay(_ReminderDraft draft, int day) {
+    setState(() {
+      if (draft.selectedDays.contains(day)) {
+        draft.selectedDays.remove(day);
+      } else {
+        draft.selectedDays.add(day);
+      }
+      if (draft.selectedDays.isNotEmpty) draft.daysError = null;
+    });
+  }
+
+  String _daySummary(Set<int> days) {
+    if (days.length == 7) return 'Every day';
+    if (days.length == 5 && days.containsAll(_weekdays)) return 'Weekdays';
+    if (days.length == 2 && days.containsAll(_weekend)) return 'Weekends';
+    if (days.isEmpty) return 'No days selected';
+    final sorted = days.toList()..sort();
+    return sorted.map((d) => _dayAbbrev[d - 1]).join(', ');
+  }
+
   void _save() {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
+    if (!_formKey.currentState!.validate()) return;
 
-      final updatedReminders = List.generate(_reminderTimes.length, (i) {
-        final time = _reminderTimes[i];
-        return ReminderRule(
-          id: '${DateTime.now().millisecondsSinceEpoch}_rule_$i',
-          hour: time.hour,
-          minute: time.minute,
-          daysOfWeek: _allDays,
-        );
-      });
+    var allValid = true;
+    setState(() {
+      for (final draft in _reminderDrafts) {
+        final dosage = draft.dosageController.text.trim();
+        draft.dosageError = dosage.isEmpty ? 'Required' : null;
+        if (dosage.isEmpty) allValid = false;
 
-      final updatedMedication = Medication(
-        id: widget.initialMedication?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _name,
-        colorValue: _selectedColor,
-        reminders: updatedReminders,
-        history: widget.initialMedication?.history ?? [],
+        draft.daysError = draft.selectedDays.isEmpty ? 'Select at least one day' : null;
+        if (draft.selectedDays.isEmpty) allValid = false;
+      }
+    });
+    if (!allValid) return;
+
+    _formKey.currentState!.save();
+
+    final updatedReminders = List.generate(_reminderDrafts.length, (i) {
+      final draft = _reminderDrafts[i];
+      final sortedDays = draft.selectedDays.toList()..sort();
+      return ReminderRule(
+        id: widget.initialMedication?.reminders.elementAtOrNull(i)?.id ??
+            '${DateTime.now().millisecondsSinceEpoch}_rule_$i',
+        hour: draft.time.hour,
+        minute: draft.time.minute,
+        daysOfWeek: sortedDays,
+        dosage: draft.dosageController.text.trim(),
       );
+    });
 
-      widget.onSave(updatedMedication);
-      Navigator.pop(context);
-    }
+    final updatedMedication = Medication(
+      id: widget.initialMedication?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: _name,
+      colorValue: _selectedColor,
+      reminders: updatedReminders,
+      history: widget.initialMedication?.history ?? [],
+    );
+
+    widget.onSave(updatedMedication);
+    Navigator.pop(context);
   }
 
   @override
@@ -165,7 +246,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                 ],
               ),
               const SizedBox(height: 4),
-              if (_reminderTimes.isEmpty)
+              if (_reminderDrafts.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -187,24 +268,105 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                 )
               else
                 Column(
-                  children: List.generate(_reminderTimes.length, (index) {
-                    final time = _reminderTimes[index];
+                  children: List.generate(_reminderDrafts.length, (index) {
+                    final draft = _reminderDrafts[index];
+                    final scheme = Theme.of(context).colorScheme;
+
                     return Card(
                       elevation: 0,
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: scheme.surfaceContainerHighest,
                       margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.access_time),
-                        title: Text(
-                          time.format(context),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.access_time),
+                                const SizedBox(width: 12),
+                                InkWell(
+                                  onTap: () => _pickTime(index),
+                                  child: Text(
+                                    draft.time.format(context),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: TextField(
+                                    controller: draft.dosageController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Dosage',
+                                      hintText: 'e.g. 1 pill',
+                                      isDense: true,
+                                      errorText: draft.dosageError,
+                                    ),
+                                    onChanged: (_) {
+                                      if (draft.dosageError != null) {
+                                        setState(() => draft.dosageError = null);
+                                      }
+                                    },
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
+                                  onPressed: () => _removeTimeSlot(index),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _daySummary(draft.selectedDays),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: draft.daysError != null
+                                    ? scheme.error
+                                    : scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: List.generate(7, (dayIndex) {
+                                final day = dayIndex + 1; // 1 = Monday
+                                final selected = draft.selectedDays.contains(day);
+                                return Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                                    child: Tooltip(
+                                      message: _dayFull[dayIndex],
+                                      child: InkWell(
+                                        onTap: () => _toggleDay(draft, day),
+                                        customBorder: const CircleBorder(),
+                                        child: Container(
+                                          height: 30,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: selected ? scheme.primary : Colors.transparent,
+                                            border: Border.all(
+                                              color: selected ? scheme.primary : scheme.outlineVariant,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            _dayAbbrev[dayIndex],
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
-                          onPressed: () => _removeTimeSlot(index),
-                        ),
-                        onTap: () => _pickTime(index),
                       ),
                     );
                   }),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/enum_types.dart';
+import '../widgets/add_medication_sheet.dart';
 import '../repositories/medication_repository.dart';
 
 class MedicationDetailScreen extends StatelessWidget {
@@ -66,7 +67,16 @@ class MedicationDetailScreen extends StatelessWidget {
             icon: const Icon(Icons.edit_outlined),
             tooltip: 'Edit',
             onPressed: () {
-              // TODO: navigate to edit-medication form
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => AddMedicationSheet(
+                  initialMedication: medication,
+                  onSave: (updated) {
+                    context.read<MedicationRepository>().updateMedication(updated);
+                  },
+                ),
+              );
             },
           ),
           IconButton(

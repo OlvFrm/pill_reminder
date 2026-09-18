@@ -5,6 +5,7 @@ import '../models/history_entry.dart';
 import '../repositories/medication_repository.dart';
 import '../widgets/medication_card.dart';
 import '../widgets/log_dose_dialog.dart';
+import '../widgets/add_medication_sheet.dart';
 import 'medication_detail_screen.dart';
 
 class MedicationsScreen extends StatelessWidget {
@@ -64,7 +65,15 @@ class MedicationsScreen extends StatelessWidget {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // TODO: navigate to add-medication form
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => AddMedicationSheet(
+              onSave: (medication) {
+                context.read<MedicationRepository>().addMedication(medication);
+              },
+            ),
+          );
         },
         child: const Icon(Icons.add),
       ),
