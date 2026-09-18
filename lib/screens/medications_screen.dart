@@ -4,6 +4,7 @@ import '../models/enum_types.dart';
 import '../models/history_entry.dart';
 import '../repositories/medication_repository.dart';
 import '../widgets/medication_card.dart';
+import '../widgets/log_dose_dialog.dart';
 import 'medication_detail_screen.dart';
 
 class MedicationsScreen extends StatelessWidget {
@@ -14,35 +15,14 @@ class MedicationsScreen extends StatelessWidget {
     final medication = repository.getById(medicationId);
     if (medication == null) return;
 
-    final controller = TextEditingController();
+    final result = await showLogDoseDialog(context, medication);
+    if (result == null) return;
 
-    final dosage = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Log dose'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Dosage (e.g. 1 pill, 500mg)'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Log'),
-          ),
-        ],
-      ),
-    );
-
-    if (dosage == null || dosage.isEmpty) return;
+    final (dosage, timestamp) = result;
 
     final entry = HistoryEntry(
       medicationId: medicationId,
-      timestamp: DateTime.now(),
+      timestamp: timestamp,
       status: LogStatus.taken,
       source: LogSource.manualEntry,
       dosage: dosage,
