@@ -1,44 +1,100 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../models/enum_types.dart';
+import '../models/history_entry.dart';
 import '../models/medication.dart';
+import 'log_status_style.dart';
 
-/// Shows a dialog to log a manual dose: dosage text + timestamp (defaults to now).
-/// Returns null if cancelled, otherwise the chosen dosage and timestamp.
-Future<(String dosage, DateTime timestamp)?> showLogDoseDialog(
+sealed class DoseDialogResult {
+  const DoseDialogResult();
+}
+
+class DoseSaved extends DoseDialogResult {
+  final String dosage;
+  final DateTime timestamp;
+  final LogStatus status;
+  const DoseSaved(this.dosage, this.timestamp, this.status);
+}
+
+class DoseDeleted extends DoseDialogResult {
+  const DoseDeleted();
+}
+
+/// Add mode: leave [initialEntry] null (optionally pass [initialDate]).
+/// Edit mode: pass [initialEntry]; status selector and Delete are shown.
+Future<DoseDialogResult?> showDoseDialog(
   BuildContext context,
-  Medication medication,
-) {
-  return showDialog<(String, DateTime)>(
+  Medication medication, {
+  HistoryEntry? initialEntry,
+  DateTime? initialDate,
+  bool chooseStatus = false,
+}) {
+  return showDialog<DoseDialogResult>(
     context: context,
-    builder: (_) => _LogDoseDialog(medication: medication),
+    builder: (_) => _DoseDialog(
+      medication: medication,
+      initialEntry: initialEntry,
+      initialDate: initialDate,
+      chooseStatus: chooseStatus,
+    ),
   );
 }
 
-class _LogDoseDialog extends StatefulWidget {
-  final Medication medication;
-
-  const _LogDoseDialog({required this.medication});
-
-  @override
-  State<_LogDoseDialog> createState() => _LogDoseDialogState();
+/// Backwards-compatible wrapper for the existing "Take" flow.
+Future<(String dosage, DateTime timestamp)?> showLogDoseDialog(
+  BuildContext context,
+  Medication medication,
+) async {
+  final result = await showDoseDialog(context, medication);
+  return result is DoseSaved ? (result.dosage, result.timestamp) : null;
 }
 
-class _LogDoseDialogState extends State<_LogDoseDialog> {
+class _DoseDialog extends StatefulWidget {
+  final Medication medication;
+  final HistoryEntry? initialEntry;
+  final DateTime? initialDate;
+  final bool chooseStatus;
+
+  const _DoseDialog({
+    required this.medication,
+    this.initialEntry,
+    this.initialDate,
+    this.chooseStatus = false,
+  });
+
+  @override
+  State<_DoseDialog> createState() => _DoseDialogState();
+}
+
+class _DoseDialogState extends State<_DoseDialog> {
   late final TextEditingController _dosageController;
   late DateTime _selectedTime;
+  late LogStatus _status;
   late List<String> _suggestedDosages;
+
+  bool get _isEditing => widget.initialEntry != null;
+  bool get _showStatus => _isEditing || widget.chooseStatus;
 
   @override
   void initState() {
     super.initState();
-    _dosageController = TextEditingController();
-    _selectedTime = DateTime.now();
-    _suggestedDosages = _computeSuggestedDosages();
+    final entry = widget.initialEntry;
+    final now = DateTime.now();
 
-    if (_suggestedDosages.isNotEmpty) {
-      _dosageController.text = _suggestedDosages.first;
+    if (entry != null) {
+      _selectedTime = entry.timestamp;
+      _status = entry.status;
+    } else {
+      final day = widget.initialDate ?? now;
+      _selectedTime = DateTime(day.year, day.month, day.day, now.hour, now.minute);
+      _status = LogStatus.taken;
     }
 
+    _suggestedDosages = _computeSuggestedDosages();
+    _dosageController = TextEditingController(
+      text: entry?.dosage ??
+          (_suggestedDosages.isNotEmpty ? _suggestedDosages.first : ''),
+    );
     _dosageController.addListener(() => setState(() {}));
   }
 
@@ -72,11 +128,12 @@ class _LogDoseDialogState extends State<_LogDoseDialog> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
     final date = await showDatePicker(
       context: context,
       initialDate: _selectedTime,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: _selectedTime.isAfter(now) ? _selectedTime : now,
     );
     if (date == null) return;
 
@@ -103,6 +160,30 @@ class _LogDoseDialogState extends State<_LogDoseDialog> {
     });
   }
 
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this entry?'),
+        content: const Text('This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      Navigator.pop(context, const DoseDeleted());
+    }
+  }
+
   String _formatDate(DateTime dt) {
     final month = dt.month.toString().padLeft(2, '0');
     final day = dt.day.toString().padLeft(2, '0');
@@ -116,15 +197,30 @@ class _LogDoseDialogState extends State<_LogDoseDialog> {
     final brightness = Theme.of(context).brightness;
 
     return AlertDialog(
-      title: const Text('Log dose'),
+      title: Text(_isEditing ? 'Edit dose' : 'Log dose'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_showStatus) ...[
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<LogStatus>(
+                  showSelectedIcon: false,
+                  segments: [
+                    for (final s in LogStatus.values)
+                      ButtonSegment(value: s, label: Text(s.label)),
+                  ],
+                  selected: {_status},
+                  onSelectionChanged: (s) => setState(() => _status = s.first),
+                ),
+              ),
+              const SizedBox(height: 16.0),
+            ],
             TextField(
               controller: _dosageController,
-              autofocus: true,
+              autofocus: !_isEditing,
               decoration: const InputDecoration(labelText: 'Dosage (e.g. 1 pill, 500mg)'),
             ),
             if (_suggestedDosages.isNotEmpty) ...[
@@ -169,15 +265,24 @@ class _LogDoseDialogState extends State<_LogDoseDialog> {
         ),
       ),
       actions: [
+        if (_isEditing)
+          TextButton(
+            onPressed: _confirmDelete,
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: canSubmit
-              ? () => Navigator.pop(context, (dosage, _selectedTime))
+              ? () => Navigator.pop(
+                    context,
+                    DoseSaved(dosage, _selectedTime, _status),
+                  )
               : null,
-          child: const Text('Log'),
+          child: Text(_isEditing ? 'Save' : 'Log'),
         ),
       ],
     );

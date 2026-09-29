@@ -55,8 +55,6 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
   static const List<String> _dayFull = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
   ];
-  static const Set<int> _weekdays = {1, 2, 3, 4, 5};
-  static const Set<int> _weekend = {6, 7};
 
   @override
   void initState() {
@@ -127,15 +125,6 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
       }
       if (draft.selectedDays.isNotEmpty) draft.daysError = null;
     });
-  }
-
-  String _daySummary(Set<int> days) {
-    if (days.length == 7) return 'Every day';
-    if (days.length == 5 && days.containsAll(_weekdays)) return 'Weekdays';
-    if (days.length == 2 && days.containsAll(_weekend)) return 'Weekends';
-    if (days.isEmpty) return 'No days selected';
-    final sorted = days.toList()..sort();
-    return sorted.map((d) => _dayAbbrev[d - 1]).join(', ');
   }
 
   void _save() {
@@ -317,7 +306,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              _daySummary(draft.selectedDays),
+                              summarizeDays(draft.selectedDays),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,

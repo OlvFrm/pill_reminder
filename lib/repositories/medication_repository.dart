@@ -39,6 +39,35 @@ class MedicationRepository extends ChangeNotifier {
     return null;
   }
 
+  void addHistoryEntry(HistoryEntry entry) {
+    _changeHistory(entry.medicationId, (history) => [...history, entry]);
+  }
+
+  void updateHistoryEntry(HistoryEntry updated) {
+    _changeHistory(
+      updated.medicationId,
+      (history) => [for (final e in history) e.id == updated.id ? updated : e],
+    );
+  }
+
+  void removeHistoryEntry(String medicationId, String entryId) {
+    _changeHistory(
+      medicationId,
+      (history) => history.where((e) => e.id != entryId).toList(),
+    );
+  }
+
+  void _changeHistory(
+    String medicationId,
+    List<HistoryEntry> Function(List<HistoryEntry> history) transform,
+  ) {
+    final index = _medications.indexWhere((m) => m.id == medicationId);
+    if (index == -1) return;
+    final med = _medications[index];
+    _medications[index] = med.copyWith(history: transform(med.history));
+    notifyListeners();
+  }
+
   void _seedDebugData() {
     final now = DateTime.now();
 
@@ -64,14 +93,14 @@ class MedicationRepository extends ChangeNotifier {
           ),
         ],
         history: [
-          HistoryEntry(
+          HistoryEntry.create(
             medicationId: 'debug-1',
             timestamp: now.subtract(const Duration(hours: 14)),
             status: LogStatus.taken,
             source: LogSource.fromReminder,
             dosage: '1 pill',
           ),
-          HistoryEntry(
+          HistoryEntry.create(
             medicationId: 'debug-1',
             timestamp: now.subtract(const Duration(days: 1, hours: 2)),
             status: LogStatus.missed,
@@ -101,7 +130,7 @@ class MedicationRepository extends ChangeNotifier {
         colorValue: 0xFF64B5F6,
         reminders: [],
         history: [
-          HistoryEntry(
+          HistoryEntry.create(
             medicationId: 'debug-3',
             timestamp: now.subtract(const Duration(hours: 3)),
             status: LogStatus.taken,

@@ -21,7 +21,7 @@ class MedicationsScreen extends StatelessWidget {
 
     final (dosage, timestamp) = result;
 
-    final entry = HistoryEntry(
+    final entry = HistoryEntry.create(
       medicationId: medicationId,
       timestamp: timestamp,
       status: LogStatus.taken,

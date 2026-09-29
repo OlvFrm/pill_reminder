@@ -1,21 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/enum_types.dart';
 import '../widgets/add_medication_sheet.dart';
 import '../repositories/medication_repository.dart';
+import '../widgets/history_calendar.dart';
 
 class MedicationDetailScreen extends StatelessWidget {
   final String medicationId;
 
   const MedicationDetailScreen({super.key, required this.medicationId});
-
-  String _formatDateTime(DateTime dt) {
-    final month = dt.month.toString().padLeft(2, '0');
-    final day = dt.day.toString().padLeft(2, '0');
-    final hour = dt.hour.toString().padLeft(2, '0');
-    final minute = dt.minute.toString().padLeft(2, '0');
-    return '$month/$day at $hour:$minute';
-  }
 
   Future<void> _confirmDelete(BuildContext context, String name) async {
     final confirmed = await showDialog<bool>(
@@ -54,78 +46,89 @@ class MedicationDetailScreen extends StatelessWidget {
       );
     }
 
-    final pillColorScheme = ColorScheme.fromSeed(
+    final base = Theme.of(context);
+    final scheme = ColorScheme.fromSeed(
       seedColor: Color(medication.colorValue),
-      brightness: Theme.of(context).brightness,
+      brightness: base.brightness,
+    );
+    final pillTheme = base.copyWith(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: base.appBarTheme.copyWith(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        surfaceTintColor: Colors.transparent,
+      ),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(medication.name),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edit',
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => AddMedicationSheet(
-                  initialMedication: medication,
-                  onSave: (updated) {
-                    context.read<MedicationRepository>().updateMedication(updated);
-                  },
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete',
-            onPressed: () => _confirmDelete(context, medication.name),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          Text('Schedule', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8.0),
-          if (medication.reminders.isEmpty)
-            const Text('No fixed schedule (As needed / PRN)', style: TextStyle(color: Colors.grey))
-          else
-            ...medication.reminders.map((rule) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8.0),
-                child: ListTile(
-                  leading: Icon(Icons.alarm, color: pillColorScheme.primary),
-                  title: Text(rule.formatTime(context)),
-                  subtitle: Text(rule.dosage),
-                ),
-              );
-            }),
-          const SizedBox(height: 24.0),
-          Text('History', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8.0),
-          if (medication.history.isEmpty)
-            const Text('No intake history recorded.', style: TextStyle(color: Colors.grey))
-          else
-            ...medication.history.reversed.map((entry) {
-              final isTaken = entry.status == LogStatus.taken;
-              return ListTile(
-                leading: Icon(
-                  isTaken ? Icons.check_circle : Icons.cancel,
-                  color: isTaken ? Colors.green : Colors.red,
-                ),
-                title: Text(_formatDateTime(entry.timestamp)),
-                subtitle: Text(entry.dosage),
-                trailing: Text(
-                  entry.status.name,
-                  style: TextStyle(color: pillColorScheme.onSurfaceVariant),
-                ),
-              );
-            }),
-        ],
+    return Theme(
+      data: pillTheme,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(medication.name),
+          actions: [
+            Builder(
+              // Builder so the sheet captures the pill theme from this context.
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Edit',
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => AddMedicationSheet(
+                      initialMedication: medication,
+                      onSave: (updated) {
+                        context.read<MedicationRepository>().updateMedication(updated);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete',
+                onPressed: () => _confirmDelete(context, medication.name),
+              ),
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16.0),
+          children: [
+            Text(
+              'Schedule',
+              style: base.textTheme.titleMedium?.copyWith(color: scheme.primary),
+            ),
+            const SizedBox(height: 8.0),
+            if (medication.reminders.isEmpty)
+              Text(
+                'No fixed schedule (As needed / PRN)',
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              )
+            else
+              ...medication.reminders.map((rule) {
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8.0),
+                  color: scheme.surfaceContainerHigh,
+                  child: ListTile(
+                    leading: Icon(Icons.alarm, color: scheme.primary),
+                    title: Text(rule.formatTime(context)),
+                    subtitle: Text('${rule.dosage} · ${rule.daysSummary}'),
+                  ),
+                );
+              }),
+            const SizedBox(height: 24.0),
+            Text(
+              'History',
+              style: base.textTheme.titleMedium?.copyWith(color: scheme.primary),
+            ),
+            const SizedBox(height: 8.0),
+            HistoryCalendar(medication: medication),
+          ],
+        ),
       ),
     );
   }

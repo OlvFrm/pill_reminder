@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
+import 'enum_types.dart'; // add
 import 'history_entry.dart';
 import 'reminder_rule.dart';
+
 
 @immutable
 class Medication {
@@ -19,10 +21,14 @@ class Medication {
   })  : reminders = List.unmodifiable(reminders),
         history = List.unmodifiable(history);
 
-  /// Efficient lookup without creating temporary sorted array copies
+  /// Latest entry with status == taken, without copying/sorting the list.
   HistoryEntry? get lastTakenEntry {
-    if (history.isEmpty) return null;
-    return history.reduce((a, b) => a.timestamp.isAfter(b.timestamp) ? a : b);
+    HistoryEntry? latest;
+    for (final e in history) {
+      if (e.status != LogStatus.taken) continue;
+      if (latest == null || e.timestamp.isAfter(latest.timestamp)) latest = e;
+    }
+    return latest;
   }
 
   Medication copyWith({
